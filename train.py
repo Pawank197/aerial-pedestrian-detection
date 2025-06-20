@@ -63,20 +63,13 @@ def train():
 
     # Load model with pretrained weights
     weights = RetinaNet_ResNet50_FPN_Weights.DEFAULT
-    model = retinanet_resnet50_fpn(weights=weights)
-
-    # Manually specify expected values
-    in_channels = 256  # Fixed by design in FPN
-    num_anchors = model.head.classification_head.num_anchors
-
-    # Replace the classification head
-    model.head.classification_head = RetinaNetClassificationHead(
-        in_channels, num_anchors, num_classes
-    )
-    # Override anchors to start at 16px
-    model.anchor_generator = AnchorGenerator(
-        sizes=((16,), (32,), (64,), (128,), (256,)),
-        aspect_ratios=((0.5, 1.0, 2.0),) * 5
+    model = retinanet_resnet50_fpn(
+        weights=weights,
+        num_classes=num_classes,             # include your background+foreground
+        anchor_generator=AnchorGenerator(    # pass your 16px‑based anchors here
+            sizes=((16,), (32,), (64,), (128,), (256,)),
+            aspect_ratios=((0.5, 1.0, 2.0),) * 5
+        )
     )
     model.to(device)
     optimizer = optim.Adam(model.parameters(), lr=lr)         # Adam optimizer[2]
