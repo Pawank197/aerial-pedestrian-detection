@@ -29,7 +29,7 @@ def find_latest_checkpoint(ckpt_dir):
 def train():
     # Configuration
     device      = torch.device('cuda' if torch.cuda.is_available() else 'cpu')  # select device[1]
-    num_classes = 2                                                 # pedestrians[1] + background[0]
+    num_classes = 1 + 1                                                 # pedestrians[1] + background[0]
     batch_size  = 2
     num_epochs  = 15
     lr          = 1e-4
@@ -62,9 +62,16 @@ def train():
 
 
     # Load model with pretrained weights
-    model = retinanet_resnet50_fpn(
-        weights=RetinaNet_ResNet50_FPN_Weights.DEFAULT,
-        num_classes=num_classes
+    weights = RetinaNet_ResNet50_FPN_Weights.DEFAULT
+    model = retinanet_resnet50_fpn(weights=weights)
+
+    # Manually specify expected values
+    in_channels = 256  # Fixed by design in FPN
+    num_anchors = model.head.classification_head.num_anchors
+
+    # Replace the classification head
+    model.head.classification_head = RetinaNetClassificationHead(
+        in_channels, num_anchors, num_classes
     )
     # Override anchors to start at 16px
     model.anchor_generator = AnchorGenerator(
