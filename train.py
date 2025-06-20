@@ -24,8 +24,8 @@ def find_latest_checkpoint(ckpt_dir):
 def train():
     # Configuration
     device      = torch.device('cuda' if torch.cuda.is_available() else 'cpu')  # select device[1]
-    num_classes = 1                                                         # pedestrians only[1]
-    batch_size  = 4
+    num_classes = 2                                                 # pedestrians[1] + background[0]
+    batch_size  = 2
     num_epochs  = 15
     lr          = 1e-4
 

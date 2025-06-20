@@ -25,14 +25,14 @@ class RetinaNet(nn.Module):
 
         # Feature Pyramid Network
         self.fpn = FeaturePyramidNetwork(
-            in_channels_list=[512, 1024, 2048], out_channels=256
+            in_channels_list=[512, 1024, 2048], out_channels=128
         )
         # Heads
-        self.cls_head = self._make_head(256, self.num_classes)
-        self.reg_head = self._make_head(256, 4)
+        self.cls_head = self._make_head(128, self.num_classes)
+        self.reg_head = self._make_head(128, 4)
         # Anchors and losses
         self.anchor_gen = AnchorGenerator(
-            sizes=[16, 32, 64, 128, 256],
+            sizes=[16, 32, 64, 128],
             aspect_ratios=[0.5, 1.0, 2.0]
         )
         self.focal_loss = FocalLoss(alpha=0.25, gamma=2.0)
