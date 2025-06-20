@@ -5,8 +5,8 @@ import torch.optim as optim
 from torch.utils.data import DataLoader
 #   from models.retinanet import RetinaNet
 ## changes ##
-from torchvision.models.detection import retinanet_resnet50_fpn, RetinaNet_ResNet50_FPN_Weights
-from torchvision.models.detection.retinanet import RetinaNetClassificationHead
+from torchvision.models.detection import retinanet_resnet50_fpn
+from torchvision.models import ResNet50_Weights
 from torchvision.models.detection.anchor_utils import AnchorGenerator
 ## changes ##
 from utils.dataset import AerialPedestrianDataset
@@ -62,15 +62,16 @@ def train():
 
 
     # Load model with pretrained weights
-    weights = RetinaNet_ResNet50_FPN_Weights.DEFAULT
     model = retinanet_resnet50_fpn(
-        weights=weights,
-        num_classes=num_classes,             # include your background+foreground
-        anchor_generator=AnchorGenerator(    # pass your 16px‑based anchors here
+        weights=None,                            # no full‑model weights
+        weights_backbone=ResNet50_Weights.DEFAULT,  # only the backbone
+        num_classes=num_classes,                 # your 2 classes
+        anchor_generator=AnchorGenerator(
             sizes=((16,), (32,), (64,), (128,), (256,)),
             aspect_ratios=((0.5, 1.0, 2.0),) * 5
         )
     )
+
     model.to(device)
     optimizer = optim.Adam(model.parameters(), lr=lr)         # Adam optimizer[2]
     scheduler = optim.lr_scheduler.StepLR(optimizer,
