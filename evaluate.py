@@ -39,7 +39,7 @@ def evaluate(epoch, data_dir, ckpt_dir):
     val_ds = AerialPedestrianDataset(
         f"{data_dir}/val_annotations.csv",
         f"{data_dir}/labels.csv",
-        f"{data_dir}/val",
+        f"{data_dir}",
         transform=val_transforms
     )  # load validation set[3]
     val_loader = DataLoader(

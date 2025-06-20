@@ -39,7 +39,7 @@ def test_eval(epoch, data_dir, ckpt_dir):
     test_ds = AerialPedestrianDataset(
         f"{data_dir}/test_annotations.csv",
         f"{data_dir}/labels.csv",
-        f"{data_dir}/test",
+        f"{data_dir}",
         transform=test_transforms
     )
     test_loader = DataLoader(
