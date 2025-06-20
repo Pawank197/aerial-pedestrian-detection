@@ -83,7 +83,7 @@ def train():
         model.train()
         total_loss = 0.0
 
-        for imgs, targets in train_loader:
+        for i, (imgs, targets) in enumerate(train_loader):
             imgs    = [img.to(device) for img in imgs]
             targets = [{k: v.to(device) for k, v in t.items()} for t in targets]
 
@@ -94,9 +94,12 @@ def train():
 
             total_loss += loss.item()
 
+            if i % 10 == 0:
+                print(f'Epoch [{epoch}/{num_epochs}], Step [{i}/{len(train_loader)}], Loss: {loss.item():.4f}')
+
         scheduler.step()                                        # update lr[2]
         avg_loss = total_loss / len(train_loader)
-        print(f'Epoch {epoch}/{num_epochs}, Loss: {avg_loss:.4f}')
+        print(f'Epoch {epoch} Completed. Average Epoch Loss: {avg_loss:.4f}')
 
         # Save epoch-specific checkpoint
         epoch_path = os.path.join(ckpt_dir, f'weights_epoch_{epoch}.pth')
