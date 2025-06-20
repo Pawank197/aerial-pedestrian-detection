@@ -40,7 +40,7 @@ def train():
     train_ds     = AerialPedestrianDataset(
                        'data/train_annotations.csv',
                        'data/labels.csv',
-                       'data/train',
+                       'data',
                        transform=train_transforms
                    )  # load train set[1]
     train_loader = DataLoader(

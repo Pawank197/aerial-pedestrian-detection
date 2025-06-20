@@ -35,34 +35,25 @@ class AerialPedestrianDataset(Dataset):
         return len(self.image_paths)
 
     def __getitem__(self, idx):
-        # Original annotation path (e.g., "img/train/file.jpg")
+        # Retrieve image path and load image
         img_name = self.image_paths[idx]
-
-        # First, try joining directly
         img_path = os.path.join(self.img_dir, img_name)
-        
-        # If not found, strip leading 'img/' and retry
-        if not os.path.isfile(img_path) and img_name.startswith('img/'):
-            # Remove only the first 'img/' occurrence
-            rel_path = img_name.split('img/', 1)[1]
-            img_path = os.path.join(self.img_dir, rel_path)
-
-        # Load the image
         image = Image.open(img_path).convert('RGB')
 
-        # Fetch and process annotations as before
+        # Fetch annotations for this image
         records = self.grouped.get_group(img_name)
-        boxes   = records[['x1','y1','x2','y2']].values.astype(float)
-        labels  = records['class_name'].map(self.class_to_id).values.astype(int)
+        boxes = records[['x1', 'y1', 'x2', 'y2']].values.astype(float)
+        labels = records['class_name'].map(self.class_to_id).values.astype(int)
 
+        # Convert to tensors
         target = {
             'boxes': torch.tensor(boxes, dtype=torch.float32),
             'labels': torch.tensor(labels, dtype=torch.int64),
             'image_id': torch.tensor([idx])
         }
 
+        # Apply transforms (if any)
         if self.transform:
             image, target = self.transform(image, target)
 
         return image, target
-
