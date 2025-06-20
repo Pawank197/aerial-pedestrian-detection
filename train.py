@@ -3,10 +3,15 @@ import re
 import torch
 import torch.optim as optim
 from torch.utils.data import DataLoader
-from models.retinanet import RetinaNet
+#   from models.retinanet import RetinaNet
+## changes ##
+from torchvision.models.detection import retinanet_resnet50_fpn, RetinaNet_ResNet50_FPN_Weights
+from torchvision.models.detection.retinanet import RetinaNetClassificationHead
+from torchvision.models.detection.anchor_utils import AnchorGenerator
+## changes ##
 from utils.dataset import AerialPedestrianDataset
 from utils.transforms import Compose, ToTensor, Normalize, RandomHorizontalFlip
-from collate_fn import pad_collate
+from collate_fn import pad_Collate
 
 def find_latest_checkpoint(ckpt_dir):
     """
@@ -48,11 +53,25 @@ def train():
                        train_ds,
                        batch_size=batch_size,
                        shuffle=True,
-                       collate_fn=pad_collate
+                       collate_fn=pad_Collate
                    )  # batch loader[1]
 
     # Model, optimizer, scheduler
-    model     = RetinaNet(num_classes=num_classes).to(device)  # initialize RetinaNet[4]
+
+    # 1. Load a pretrained RetinaNet backbone (on COCO) and reset the head for your num_classes
+
+
+    # Load model with pretrained weights
+    model = retinanet_resnet50_fpn(
+        weights=RetinaNet_ResNet50_FPN_Weights.DEFAULT,
+        num_classes=num_classes
+    )
+    # Override anchors to start at 16px
+    model.anchor_generator = AnchorGenerator(
+        sizes=((16,), (32,), (64,), (128,), (256,)),
+        aspect_ratios=((0.5, 1.0, 2.0),) * 5
+    )
+    model.to(device)
     optimizer = optim.Adam(model.parameters(), lr=lr)         # Adam optimizer[2]
     scheduler = optim.lr_scheduler.StepLR(optimizer,
                                           step_size=10,
@@ -60,59 +79,54 @@ def train():
 
     # Checkpoint directory setup
     ckpt_dir = 'checkpoints'
-    os.makedirs(ckpt_dir, exist_ok=True)                        # ensure directory exists[4]
+    os.makedirs(ckpt_dir, exist_ok=True)                        # ensure directory exists[4]    
 
     # Resume from latest checkpoint if available
     start_epoch = 0
-    latest_epoch = find_latest_checkpoint(ckpt_dir)
-    if latest_epoch > 0:
-        # Load epoch-specific weights and optimizer state
-        weights_path = os.path.join(ckpt_dir, f'weights_epoch_{latest_epoch}.pth')
-        opt_path     = os.path.join(ckpt_dir, 'latest.pth')
-        checkpoint   = torch.load(opt_path, map_location=device)
-        model.load_state_dict(checkpoint['model'])              # load model state[1]
-        optimizer.load_state_dict(checkpoint['optim'])          # load optimizer state[1]
-        start_epoch = latest_epoch
-        print(f"Resuming from epoch {start_epoch} of {num_epochs}")
+    latest = find_latest_checkpoint(ckpt_dir)
+    if latest > 0:
+        ckpt_path = os.path.join(ckpt_dir, f'checkpoint_epoch_{latest}.pth')
+        checkpoint = torch.load(ckpt_path, map_location=device)
+        model.load_state_dict(checkpoint['model'])
+        optimizer.load_state_dict(checkpoint['optimizer'])
+        scheduler.load_state_dict(checkpoint['scheduler'])
+        start_epoch = checkpoint['epoch']
+        print(f"Resumed from epoch {start_epoch}")
 
     # Adjust remaining epochs
     remaining_epochs = num_epochs - start_epoch
 
     # Training loop
-    for epoch_offset in range(1, remaining_epochs + 1):
-        epoch = start_epoch + epoch_offset
+    for epoch in range(start_epoch + 1, num_epochs + 1):
         model.train()
-        total_loss = 0.0
+        running_loss = 0.0
 
         for i, (imgs, targets) in enumerate(train_loader):
-            imgs = torch.stack([img.to(device) for img in imgs])
+            imgs = [img.to(device) for img in imgs]
             targets = [{k: v.to(device) for k, v in t.items()} for t in targets]
 
+            loss_dict = model(imgs, targets)
+            loss = sum(loss for loss in loss_dict.values())
+
             optimizer.zero_grad()
-            loss = model(imgs, targets)                        # compute loss[4]
             loss.backward()
             optimizer.step()
 
-            total_loss += loss.item()
-
+            running_loss += loss.item()
             if i % 10 == 0:
-                print(f'Epoch [{epoch}/{num_epochs}], Step [{i}/{len(train_loader)}], Loss: {loss.item():.4f}')
+                print(f"Epoch [{epoch}/{num_epochs}] | Step [{i}/{len(train_loader)}] | Loss: {loss.item():.4f}")
 
-        scheduler.step()                                        # update lr[2]
-        avg_loss = total_loss / len(train_loader)
-        print(f'Epoch {epoch} Completed. Average Epoch Loss: {avg_loss:.4f}')
+        scheduler.step()
+        avg_loss = running_loss / len(train_loader)
+        print(f"Epoch {epoch} completed. Avg Loss: {avg_loss:.4f}")
 
-        # Save epoch-specific checkpoint
-        epoch_path = os.path.join(ckpt_dir, f'weights_epoch_{epoch}.pth')
-        torch.save(model.state_dict(), epoch_path)             # save distinct weights[1]
-
-        # Update and save latest state (including optimizer)
-        latest_state = {
+        # Save checkpoint
+        state = {
             'epoch': epoch,
             'model': model.state_dict(),
-            'optim': optimizer.state_dict()
+            'optimizer': optimizer.state_dict(),
+            'scheduler': scheduler.state_dict()
         }
-        torch.save(latest_state, os.path.join(ckpt_dir, 'latest.pth'))
-
+        torch.save(state, os.path.join(ckpt_dir, f'checkpoint_epoch_{epoch}.pth'))
 if __name__ == '__main__':
     train()
