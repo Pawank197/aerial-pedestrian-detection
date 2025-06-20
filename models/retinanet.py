@@ -32,7 +32,7 @@ class RetinaNet(nn.Module):
         self.reg_head = self._make_head(256, 4)
         # Anchors and losses
         self.anchor_gen = AnchorGenerator(
-            sizes=[32, 64, 128, 256, 512],
+            sizes=[16, 32, 64, 128, 256],
             aspect_ratios=[0.5, 1.0, 2.0]
         )
         self.focal_loss = FocalLoss(alpha=0.25, gamma=2.0)
