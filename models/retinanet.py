@@ -10,11 +10,11 @@ from .losses import FocalLoss, SmoothL1Loss
 
 
 class RetinaNet(nn.Module):
-    def __init__(self, num_classes, backbone_name='resnet18', pretrained=True):
+    def __init__(self, num_classes, backbone_name='resnet50', pretrained=True):
         super(RetinaNet, self).__init__()
         # Number of object classes (excluding background)
         self.num_classes = num_classes
-        # Backbone: ResNet18 truncated at C5
+        # Backbone: ResNet50 truncated at C5
         resnet = getattr(models, backbone_name)(pretrained=pretrained)
         self.layer1 = nn.Sequential(
             resnet.conv1, resnet.bn1, resnet.relu, resnet.maxpool,
@@ -25,7 +25,7 @@ class RetinaNet(nn.Module):
 
         # Feature Pyramid Network
         self.fpn = FeaturePyramidNetwork(
-            in_channels_list=[128, 256, 512], out_channels=128
+            in_channels_list=[512, 1024, 2048], out_channels=128
         )
         # Heads
         self.cls_head = self._make_head(128, self.num_classes)
