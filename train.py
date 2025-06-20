@@ -6,6 +6,7 @@ from torch.utils.data import DataLoader
 from models.retinanet import RetinaNet
 from utils.dataset import AerialPedestrianDataset
 from utils.transforms import Compose, ToTensor, Normalize, RandomHorizontalFlip
+from collate_fn import pad_collate
 
 def find_latest_checkpoint(ckpt_dir):
     """
@@ -47,7 +48,7 @@ def train():
                        train_ds,
                        batch_size=batch_size,
                        shuffle=True,
-                       collate_fn=lambda x: tuple(zip(*x))
+                       collate_fn=pad_collate
                    )  # batch loader[1]
 
     # Model, optimizer, scheduler

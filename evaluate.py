@@ -6,6 +6,7 @@ from models.retinanet import RetinaNet
 from utils.dataset import AerialPedestrianDataset
 from utils.transforms import Compose, ToTensor, Normalize
 from utils.evaluation import calculate_map
+from collate_fn import pad_collate
 
 def parse_args():
     parser = argparse.ArgumentParser(
@@ -44,7 +45,7 @@ def evaluate(epoch, data_dir, ckpt_dir):
     )  # load validation set[3]
     val_loader = DataLoader(
         val_ds, batch_size=batch_size, shuffle=False,
-        collate_fn=lambda x: tuple(zip(*x))
+        collate_fn=pad_collate
     )  # batch loader for validation[3]
 
     # Initialize and load model weights for the specified epoch
