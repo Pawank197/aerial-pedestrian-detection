@@ -59,7 +59,7 @@ def test_eval(epoch, data_dir, ckpt_dir):
     all_preds, all_targets = [], []
     with torch.no_grad():
         for imgs, targets in test_loader:
-            imgs = [img.to(device) for img in imgs]
+            imgs = torch.stack([img.to(device) for img in imgs])
             outputs = model(imgs)
             for out, tgt in zip(outputs, targets):
                 boxes, scores, _ = out

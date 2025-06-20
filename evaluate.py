@@ -59,7 +59,7 @@ def evaluate(epoch, data_dir, ckpt_dir):
     all_preds, all_targets = [], []
     with torch.no_grad():
         for imgs, targets in val_loader:
-            imgs = [img.to(device) for img in imgs]
+            imgs = torch.stack([img.to(device) for img in imgs])
             outputs = model(imgs)  # get detections for batch[4]
             for out, tgt in zip(outputs, targets):
                 boxes, scores, _ = out

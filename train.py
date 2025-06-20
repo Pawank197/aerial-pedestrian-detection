@@ -84,7 +84,7 @@ def train():
         total_loss = 0.0
 
         for i, (imgs, targets) in enumerate(train_loader):
-            imgs    = [img.to(device) for img in imgs]
+            imgs = torch.stack([img.to(device) for img in imgs])
             targets = [{k: v.to(device) for k, v in t.items()} for t in targets]
 
             optimizer.zero_grad()
