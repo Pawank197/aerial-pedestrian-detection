@@ -2,7 +2,9 @@ import os
 import argparse
 import torch
 from torch.utils.data import DataLoader
-from models.retinanet import RetinaNet
+from torchvision.models.detection import retinanet_resnet50_fpn
+from torchvision.models import ResNet50_Weights
+from torchvision.models.detection.anchor_utils import AnchorGenerator
 from utils.dataset import AerialPedestrianDataset
 from utils.transforms import Compose, ToTensor, Normalize
 from utils.evaluation import calculate_map
@@ -11,7 +13,7 @@ from collate_fn import pad_collate
 def parse_args():
     parser = argparse.ArgumentParser(
         description="Evaluate RetinaNet on validation set for a specific epoch"
-    )  # use argparse for CLI parsing[2]
+    )
     parser.add_argument(
         "--epoch", type=int, required=True,
         help="Epoch number whose weights to load (e.g., 10)"
@@ -22,54 +24,72 @@ def parse_args():
     )
     parser.add_argument(
         "--ckpt-dir", type=str, default="checkpoints",
-        help="Directory where epoch weight files are stored"
+        help="Directory where epoch checkpoint files are stored"
     )
     return parser.parse_args()
 
 def evaluate(epoch, data_dir, ckpt_dir):
     # Device configuration
-    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")  # select GPU if available[1]
-    num_classes = 1
+    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+    num_classes = 2  # pedestrians + background
     batch_size = 4
 
     # Prepare transforms and dataset
     val_transforms = Compose([
         ToTensor(),
         Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225])
-    ])  # validation image preprocessing[2]
+    ])
     val_ds = AerialPedestrianDataset(
         f"{data_dir}/val_annotations.csv",
         f"{data_dir}/labels.csv",
         f"{data_dir}",
         transform=val_transforms
-    )  # load validation set[3]
+    )
     val_loader = DataLoader(
         val_ds, batch_size=batch_size, shuffle=False,
         collate_fn=pad_collate
-    )  # batch loader for validation[3]
+    )
 
-    # Initialize and load model weights for the specified epoch
-    model = RetinaNet(num_classes=num_classes).to(device)  # instantiate RetinaNet[1]
-    ckpt_path = os.path.join(ckpt_dir, f"weights_epoch_{epoch}.pth")
+    # Initialize model with same config as training
+    model = retinanet_resnet50_fpn(
+        weights=None,
+        weights_backbone=ResNet50_Weights.DEFAULT,
+        num_classes=num_classes,
+        anchor_generator=AnchorGenerator(
+            sizes=((16,), (32,), (64,), (128,), (256,)),
+            aspect_ratios=((0.5, 1.0, 2.0),) * 5
+        )
+    ).to(device)
+
+    # Load checkpoint
+    ckpt_path = os.path.join(ckpt_dir, f"checkpoint_epoch_{epoch}.pth")
     if not os.path.exists(ckpt_path):
         raise FileNotFoundError(f"Checkpoint not found: {ckpt_path}")
-    model.load_state_dict(torch.load(ckpt_path, map_location=device))  # load epoch-specific weights[1]
+    state = torch.load(ckpt_path, map_location=device)
+    model.load_state_dict(state['model'])
     model.eval()
 
     # Run inference on validation set
     all_preds, all_targets = [], []
     with torch.no_grad():
         for imgs, targets in val_loader:
-            imgs = torch.stack([img.to(device) for img in imgs])
-            outputs = model(imgs)  # get detections for batch[4]
+            imgs = [img.to(device) for img in imgs]
+            outputs = model(imgs)
             for out, tgt in zip(outputs, targets):
-                boxes, scores, _ = out
-                all_preds.append({"boxes": boxes, "scores": scores})
-                all_targets.append({"boxes": tgt["boxes"]})
+                # out is a dict with keys 'boxes', 'labels', 'scores'
+                all_preds.append({
+                    'boxes': out['boxes'].cpu(),
+                    'scores': out['scores'].cpu(),
+                    'labels': out['labels'].cpu()
+                })
+                all_targets.append({
+                    'boxes': tgt['boxes'],
+                    'labels': tgt['labels'] if 'labels' in tgt else None
+                })
 
     # Compute and print mAP@0.5 for the specified epoch
-    mAP = calculate_map(all_preds, all_targets, iou_threshold=0.5)  # compute mAP metric[3]
-    print(f"Epoch {epoch} — mAP@0.5: {mAP:.4f}")  # display result[3]
+    mAP = calculate_map(all_preds, all_targets, iou_threshold=0.5)
+    print(f"Epoch {epoch} — mAP@0.5: {mAP:.4f}")
 
 if __name__ == "__main__":
     args = parse_args()
