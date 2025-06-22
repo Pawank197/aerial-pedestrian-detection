@@ -26,7 +26,8 @@ num_classes = 2  # pedestrians + background
 batch_size  = 2
 num_epochs  = 15
 lr          = 1e-4
-
+g = torch.Generator()
+g.manual_seed(42)
 
 # Data transforms
 def get_transforms(is_train=True):
@@ -70,7 +71,7 @@ def train():
         'data',
         transform=get_transforms()
     )
-    train_loader = DataLoader(train_ds, batch_size=batch_size, shuffle=True, collate_fn=pad_Collate)
+    train_loader = DataLoader(train_ds, batch_size=batch_size, shuffle=True, collate_fn=pad_Collate, generator=g)
     val_transforms = Compose([
         ToTensor(),                                        # convert image to tensor[2]
         Normalize(mean=[0.485,0.456,0.406],                # normalize inputs[2]
