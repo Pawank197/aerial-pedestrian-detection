@@ -39,8 +39,8 @@ def get_transforms(is_train=True):
             A.HorizontalFlip(p=0.5),
             A.VerticalFlip(p=0.5),
             A.Rotate(limit=90, p=0.5),
-            A.RandomResizedCrop(height=800, width=1333, scale=(0.8, 1.2), p=0.5),
-            # Add these missing augmentations:
+            # Corrected: Use size parameter instead of height/width
+            A.RandomResizedCrop(size=(800, 1333), scale=(0.8, 1.0), p=0.5),
             A.RandomBrightnessContrast(p=0.2),
             A.HueSaturationValue(p=0.2),
             A.GaussNoise(p=0.2),
@@ -49,23 +49,19 @@ def get_transforms(is_train=True):
                 A.MedianBlur(blur_limit=3, p=0.1),
                 A.Blur(blur_limit=3, p=0.1),
             ], p=0.2),
-            # Scale jittering (critical for detection)
             A.LongestMaxSize(max_size=1333, p=1.0),
             A.PadIfNeeded(min_height=800, min_width=800, p=1.0),
             A.Normalize(mean=(0.485, 0.456, 0.406), std=(0.229, 0.224, 0.225)),
             ToTensorV2()
         ], bbox_params=A.BboxParams(format='pascal_voc', label_fields=['labels']))
     else:
-        # Use multi-scale testing for validation
         transform = A.Compose([
-            A.LongestMaxSize(max_size=1333, p=1.0),  # Multi-scale
+            A.LongestMaxSize(max_size=1333, p=1.0),
             A.PadIfNeeded(min_height=800, min_width=800, p=1.0),
             A.Normalize(mean=(0.485, 0.456, 0.406), std=(0.229, 0.224, 0.225)),
             ToTensorV2()
         ], bbox_params=A.BboxParams(format='pascal_voc', label_fields=['labels']))
     return transform
-
-
 
 # Model creation
 def create_model():
@@ -81,9 +77,8 @@ def create_model():
         backbone,
         num_classes=num_classes,  # pedestrians + background
         anchor_generator=AnchorGenerator(
-            sizes=((16,), (32,), (64,), (128,), (256,)),  # Adjusted for Stanford Drone
+            sizes=((16, 22, 32), (32, 45, 64), (64, 90, 128), (128, 180, 256), (256, 362, 512)),
             aspect_ratios=((0.5, 1.0, 2.0, 3.0),) * 5,   # Added 3.0 ratio for pedestrians
-            scales=(1.0, 1.2, 1.6)  # Multiple scales per octave
             ),
             focal_loss_alpha=0.25,  # Default but explicit
             focal_loss_gamma=2.0    # Proven optimal for aerial imagery
