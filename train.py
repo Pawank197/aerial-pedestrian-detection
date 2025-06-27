@@ -14,6 +14,7 @@ from utils.evaluation import calculate_map
 from torchvision.models.detection import RetinaNet
 from torchvision.models.detection.backbone_utils import resnet_fpn_backbone
 from torchvision.models.detection.anchor_utils import AnchorGenerator
+from torch.optim.lr_scheduler import LinearLR, SequentialLR
 import albumentations as A
 from albumentations.pytorch import ToTensorV2
 
@@ -27,7 +28,7 @@ device      = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 num_classes = 2  # pedestrians + background
 batch_size  = 8
 num_epochs  = 25
-lr          = 1e-4
+lr          = 1e-3
 g = torch.Generator()
 g.manual_seed(42)
 
@@ -36,19 +37,34 @@ def get_transforms(is_train=True):
     if is_train:
         transform = A.Compose([
             A.HorizontalFlip(p=0.5),
-            A.VerticalFlip(p=0.5),  # Good for aerial imagery
-            A.Rotate(limit=90, p=0.5),  # Random rotation up to ±90°
+            A.VerticalFlip(p=0.5),
+            A.Rotate(limit=90, p=0.5),
             A.RandomResizedCrop(height=800, width=1333, scale=(0.8, 1.2), p=0.5),
+            # Add these missing augmentations:
+            A.RandomBrightnessContrast(p=0.2),
+            A.HueSaturationValue(p=0.2),
+            A.GaussNoise(p=0.2),
+            A.OneOf([
+                A.MotionBlur(p=0.2),
+                A.MedianBlur(blur_limit=3, p=0.1),
+                A.Blur(blur_limit=3, p=0.1),
+            ], p=0.2),
+            # Scale jittering (critical for detection)
+            A.LongestMaxSize(max_size=1333, p=1.0),
+            A.PadIfNeeded(min_height=800, min_width=800, p=1.0),
             A.Normalize(mean=(0.485, 0.456, 0.406), std=(0.229, 0.224, 0.225)),
             ToTensorV2()
         ], bbox_params=A.BboxParams(format='pascal_voc', label_fields=['labels']))
     else:
+        # Use multi-scale testing for validation
         transform = A.Compose([
-            A.Resize(height=800, width=1333),
+            A.LongestMaxSize(max_size=1333, p=1.0),  # Multi-scale
+            A.PadIfNeeded(min_height=800, min_width=800, p=1.0),
             A.Normalize(mean=(0.485, 0.456, 0.406), std=(0.229, 0.224, 0.225)),
             ToTensorV2()
         ], bbox_params=A.BboxParams(format='pascal_voc', label_fields=['labels']))
-    return transform 
+    return transform
+
 
 
 # Model creation
@@ -57,7 +73,7 @@ def create_model():
     backbone = resnet_fpn_backbone(
         'resnet101',       # swap in ResNet-101 (instead of resnet50)
         pretrained=True,   # ImageNet weights
-        trainable_layers=3 # how many top blocks to fine-tune
+        trainable_layers=3, # how many top blocks to fine-tune
     )
 
     # 2) Plug it into the generic RetinaNet constructor
@@ -82,21 +98,16 @@ def train():
         'data/train_annotations.csv',
         'data/labels.csv',
         'data',
-        transform=get_transforms()
+        transform=get_transforms(is_train=True)
     )
     train_loader = DataLoader(train_ds, batch_size=batch_size, shuffle=True, collate_fn=pad_Collate, generator=g)
-    val_transforms = Compose([
-        ToTensor(),                                        # convert image to tensor[2]
-        Normalize(mean=[0.485,0.456,0.406],                # normalize inputs[2]
-                  std=[0.229,0.224,0.225]),                
-    ])
 
     # Dataset and DataLoader
     val_ds     = AerialPedestrianDataset(
                        'data/val_annotations.csv',
                        'data/labels.csv',
                        'data',
-                       transform=val_transforms
+                       transform=get_transforms(is_train=False)
                    )  # load train set[1]
     val_loader = DataLoader(
                        val_ds,
@@ -107,11 +118,29 @@ def train():
 
     # Initialize model, optimizer, scheduler
     model     = create_model()
-    optimizer = optim.Adam(model.parameters(), lr=lr)
-    scheduler = optim.lr_scheduler.MultiStepLR(
-        optimizer, 
-        milestones=[8, 11], 
+    optimizer = optim.AdamW(
+        model.parameters(), 
+        lr=lr,             # Initial learning rate
+        weight_decay=1e-4, # weight decay
+        eps=1e-8
+    )
+
+    warmup_scheduler = LinearLR(
+        optimizer,
+        start_factor=0.1,
+        total_iters=1000  # 1000 iterations warmup
+    )
+
+    main_scheduler = optim.lr_scheduler.MultiStepLR(
+        optimizer,
+        milestones=[15, 20],  # Later milestones
         gamma=0.1
+    )
+
+    scheduler = SequentialLR(
+        optimizer,
+        schedulers=[warmup_scheduler, main_scheduler],
+        milestones=[1000]
     )
 
     start_epoch = 0
