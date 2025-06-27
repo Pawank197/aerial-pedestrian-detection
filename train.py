@@ -35,7 +35,7 @@ def train_transform():
         RandomHorizontalFlip(prob=0.5),
         RandomVerticalFlip(prob=0.5),
         ColorJitter(brightness=0.2, contrast=0.2, saturation=0.2, hue=0.1),
-        RandomScale(scale_range=(0.8, 1.2)),
+        RandomScale(scale_factor=(0.8, 1.2)),
         RandomRotation(degrees=10)
     ])
 
