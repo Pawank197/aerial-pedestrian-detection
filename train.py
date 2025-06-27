@@ -8,14 +8,13 @@ from torchvision.models.detection import RetinaNet
 from torchvision.models.detection.backbone_utils import resnet_fpn_backbone
 from torchvision.models.detection.anchor_utils import AnchorGenerator
 from utils.dataset import AerialPedestrianDataset
+from utils.transforms import Compose, ToTensor, Normalize, RandomHorizontalFlip, RandomVerticalFlip, ColorJitter, RandomScale, RandomRotation
 from collate_fn import pad_Collate
 from utils.evaluation import calculate_map
 from torchvision.models.detection import RetinaNet
 from torchvision.models.detection.backbone_utils import resnet_fpn_backbone
 from torchvision.models.detection.anchor_utils import AnchorGenerator
 from torch.optim.lr_scheduler import LinearLR, SequentialLR
-import albumentations as A
-from albumentations.pytorch import ToTensorV2
 
 checkpoint_path = None
 
@@ -29,47 +28,22 @@ g = torch.Generator()
 g.manual_seed(42)
 
 # Data transforms
-def get_val_transform():
-    return A.Compose([
-        A.Normalize(
-            mean=(0.485, 0.456, 0.406),
-            std=(0.229, 0.224, 0.225)
-        ),
-        ToTensorV2()
-    ], bbox_params=A.BboxParams(
-        format='pascal_voc',
-        label_fields=['labels'],
-        min_area=4,
-        min_visibility=0.1,
-        clip=True
-    ))
+def train_transform():
+    return Compose([
+        ToTensor(),
+        Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225]),
+        RandomHorizontalFlip(prob=0.5),
+        RandomVerticalFlip(prob=0.5),
+        ColorJitter(brightness=0.2, contrast=0.2, saturation=0.2, hue=0.1),
+        RandomScale(scale_range=(0.8, 1.2)),
+        RandomRotation(degrees=10)
+    ])
 
-def get_train_transform():
-    return A.Compose([
-        A.HorizontalFlip(p=0.5),
-        A.RandomBrightnessContrast(p=0.2),
-        A.ShiftScaleRotate(
-            shift_limit=0.05,
-            scale_limit=0.1,
-            rotate_limit=10,
-            border_mode=0,
-            p=0.5
-        ),
-        A.Blur(blur_limit=3, p=0.1),
-        A.CLAHE(p=0.1),
-        A.HueSaturationValue(p=0.2),
-        A.Normalize(
-            mean=(0.485, 0.456, 0.406),
-            std=(0.229, 0.224, 0.225)
-        ),
-        ToTensorV2()
-    ], bbox_params=A.BboxParams(
-        format='pascal_voc',
-        label_fields=['labels'],
-        min_area=4,
-        min_visibility=0.1,
-        clip=True
-    ))
+def val_transform():
+    return Compose([
+        ToTensor(),
+        Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225])
+    ])
 
 
 # Model creation
@@ -102,7 +76,7 @@ def train():
         'data/train_annotations.csv',
         'data/labels.csv',
         'data',
-        transform=get_train_transform()
+        transform=train_transform()
     )
     train_loader = DataLoader(train_ds, batch_size=batch_size, shuffle=True, collate_fn=pad_Collate, generator=g)
 
@@ -111,7 +85,7 @@ def train():
                        'data/val_annotations.csv',
                        'data/labels.csv',
                        'data',
-                       transform=get_val_transform()
+                       transform=val_transform()
                    )  # load train set[1]
     val_loader = DataLoader(
                        val_ds,
