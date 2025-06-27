@@ -21,7 +21,7 @@ from albumentations.pytorch import ToTensorV2
 # --- User-configurable checkpoint path ---
 # Set this to your desired .pth file to resume training,
 # or set to None to start from scratch:
-checkpoint_path = 'checkpoints/101_checkpoint_epoch_6.pth'
+checkpoint_path = None
 
 # Training parameters
 device      = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
@@ -39,7 +39,6 @@ def get_transforms(is_train=True):
             A.HorizontalFlip(p=0.5),
             A.VerticalFlip(p=0.5),
             A.Rotate(limit=90, p=0.5),
-            # Corrected: Use size parameter instead of height/width
             A.RandomResizedCrop(size=(800, 1333), scale=(0.8, 1.0), p=0.5),
             A.RandomBrightnessContrast(p=0.2),
             A.HueSaturationValue(p=0.2),
@@ -53,15 +52,28 @@ def get_transforms(is_train=True):
             A.PadIfNeeded(min_height=800, min_width=800, p=1.0),
             A.Normalize(mean=(0.485, 0.456, 0.406), std=(0.229, 0.224, 0.225)),
             ToTensorV2()
-        ], bbox_params=A.BboxParams(format='pascal_voc', label_fields=['labels']))
+        ], bbox_params=A.BboxParams(
+            format='pascal_voc', 
+            label_fields=['labels'],
+            min_area=4,           # Filter very small boxes (2x2 pixels minimum)
+            min_visibility=0.1,   # Keep boxes with at least 10% visibility
+            clip=True            # Clip boxes to image boundaries
+        ))
     else:
         transform = A.Compose([
             A.LongestMaxSize(max_size=1333, p=1.0),
             A.PadIfNeeded(min_height=800, min_width=800, p=1.0),
             A.Normalize(mean=(0.485, 0.456, 0.406), std=(0.229, 0.224, 0.225)),
             ToTensorV2()
-        ], bbox_params=A.BboxParams(format='pascal_voc', label_fields=['labels']))
+        ], bbox_params=A.BboxParams(
+            format='pascal_voc', 
+            label_fields=['labels'],
+            min_area=4,
+            min_visibility=0.1,
+            clip=True
+        ))
     return transform
+
 
 # Model creation
 def create_model():

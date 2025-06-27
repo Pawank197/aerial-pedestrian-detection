@@ -46,6 +46,26 @@ class AerialPedestrianDataset(Dataset):
         boxes = records[['x1', 'y1', 'x2', 'y2']].values.astype(float).tolist()
         labels = records['class_name'].map(self.class_to_id).values.astype(int).tolist()
 
+        if len(boxes) > 0:
+            valid_boxes = []
+            valid_labels = []
+            
+            for box, label in zip(boxes, labels):
+                x1, y1, x2, y2 = box
+                # Check for valid box dimensions
+                if x2 > x1 and y2 > y1:  # Ensure positive width and height
+                    # Clamp to image boundaries
+                    x1 = max(0, min(x1, image.shape[2] - 1))
+                    y1 = max(0, min(y1, image.shape[1] - 1)) 
+                    x2 = max(x1 + 1, min(x2, image.shape[2]))  # Ensure min width of 1
+                    y2 = max(y1 + 1, min(y2, image.shape[1]))  # Ensure min height of 1
+                    
+                    valid_boxes.append([x1, y1, x2, y2])
+                    valid_labels.append(label)
+        
+            boxes = valid_boxes
+            labels = valid_labels
+
         # Convert to tensors
         if self.transform:
             transformed = self.transform(
