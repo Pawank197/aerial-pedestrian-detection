@@ -162,7 +162,6 @@ def train():
         for i, (imgs, targets) in enumerate(train_loader):
             imgs = [img.to(device) for img in imgs]
             targets = [{k: v.to(device) for k, v in t.items()} for t in targets]
-
             loss_dict = model(imgs, targets)
             loss = sum(loss for loss in loss_dict.values())
 

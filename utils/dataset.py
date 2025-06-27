@@ -57,10 +57,16 @@ class AerialPedestrianDataset(Dataset):
             boxes = transformed['bboxes']
             labels = transformed['labels']
 
+        if len(boxes) == 0:
+            boxes_tensor = torch.zeros((0, 4), dtype=torch.float32)
+            labels_tensor = torch.zeros((0,), dtype=torch.int64)
+        else:
+            boxes_tensor = torch.tensor(boxes, dtype=torch.float32)
+            labels_tensor = torch.tensor(labels, dtype=torch.int64)
         # Convert to tensors
         target = {
-            'boxes': torch.tensor(boxes, dtype=torch.float32),
-            'labels': torch.tensor(labels, dtype=torch.int64),
+            'boxes': boxes_tensor,
+            'labels': labels_tensor,
             'image_id': torch.tensor([idx])
         }
 
