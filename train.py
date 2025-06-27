@@ -14,6 +14,8 @@ from utils.evaluation import calculate_map
 from torchvision.models.detection import RetinaNet
 from torchvision.models.detection.backbone_utils import resnet_fpn_backbone
 from torchvision.models.detection.anchor_utils import AnchorGenerator
+import albumentations as A
+from albumentations.pytorch import ToTensorV2
 
 # --- User-configurable checkpoint path ---
 # Set this to your desired .pth file to resume training,
@@ -23,22 +25,30 @@ checkpoint_path = 'checkpoints/101_checkpoint_epoch_6.pth'
 # Training parameters
 device      = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 num_classes = 2  # pedestrians + background
-batch_size  = 2
-num_epochs  = 15
+batch_size  = 8
+num_epochs  = 25
 lr          = 1e-4
 g = torch.Generator()
 g.manual_seed(42)
 
 # Data transforms
 def get_transforms(is_train=True):
-    transforms = [
-        ToTensor(),
-        Normalize(mean=[0.485,0.456,0.406], std=[0.229,0.224,0.225]),
-        RandomHorizontalFlip(prob=0.5),
-
-    ]
-    
-    return Compose(transforms)
+    if is_train:
+        transform = A.Compose([
+            A.HorizontalFlip(p=0.5),
+            A.VerticalFlip(p=0.5),  # Good for aerial imagery
+            A.Rotate(limit=90, p=0.5),  # Random rotation up to ±90°
+            A.RandomResizedCrop(height=800, width=1333, scale=(0.8, 1.2), p=0.5),
+            A.Normalize(mean=(0.485, 0.456, 0.406), std=(0.229, 0.224, 0.225)),
+            ToTensorV2()
+        ], bbox_params=A.BboxParams(format='pascal_voc', label_fields=['labels']))
+    else:
+        transform = A.Compose([
+            A.Resize(height=800, width=1333),
+            A.Normalize(mean=(0.485, 0.456, 0.406), std=(0.229, 0.224, 0.225)),
+            ToTensorV2()
+        ], bbox_params=A.BboxParams(format='pascal_voc', label_fields=['labels']))
+    return transform 
 
 
 # Model creation
@@ -55,10 +65,13 @@ def create_model():
         backbone,
         num_classes=num_classes,  # pedestrians + background
         anchor_generator=AnchorGenerator(
-            sizes=((8,), (16,), (32,), (64,), (128,)),
-            aspect_ratios=((0.5, 1.0, 2.0),) * 5
+            sizes=((16,), (32,), (64,), (128,), (256,)),  # Adjusted for Stanford Drone
+            aspect_ratios=((0.5, 1.0, 2.0, 3.0),) * 5,   # Added 3.0 ratio for pedestrians
+            scales=(1.0, 1.2, 1.6)  # Multiple scales per octave
+            ),
+            focal_loss_alpha=0.25,  # Default but explicit
+            focal_loss_gamma=2.0    # Proven optimal for aerial imagery
         )
-    )
 
     return model.to(device)
 
@@ -95,7 +108,11 @@ def train():
     # Initialize model, optimizer, scheduler
     model     = create_model()
     optimizer = optim.Adam(model.parameters(), lr=lr)
-    scheduler = optim.lr_scheduler.StepLR(optimizer, step_size=10, gamma=0.1)
+    scheduler = optim.lr_scheduler.MultiStepLR(
+        optimizer, 
+        milestones=[8, 11], 
+        gamma=0.1
+    )
 
     start_epoch = 0
     # Load checkpoint if specified

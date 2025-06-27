@@ -2,6 +2,7 @@ import os
 import torch
 from torch.utils.data import Dataset
 import pandas as pd
+import numpy as np
 from PIL import Image
 
 class AerialPedestrianDataset(Dataset):
@@ -38,12 +39,23 @@ class AerialPedestrianDataset(Dataset):
         # Retrieve image path and load image
         img_name = self.image_paths[idx]
         img_path = os.path.join(self.img_dir, img_name)
-        image = Image.open(img_path).convert('RGB')
+        image = np.array(Image.open(img_path).convert('RGB'))
 
         # Fetch annotations for this image
         records = self.grouped.get_group(img_name)
-        boxes = records[['x1', 'y1', 'x2', 'y2']].values.astype(float)
-        labels = records['class_name'].map(self.class_to_id).values.astype(int)
+        boxes = records[['x1', 'y1', 'x2', 'y2']].values.astype(float).tolist()
+        labels = records['class_name'].map(self.class_to_id).values.astype(int).tolist()
+
+        # Convert to tensors
+        if self.transform:
+            transformed = self.transform(
+                image=image,
+                bboxes=boxes,
+                labels=labels
+            )
+            image = transformed['image']
+            boxes = transformed['bboxes']
+            labels = transformed['labels']
 
         # Convert to tensors
         target = {
@@ -51,9 +63,5 @@ class AerialPedestrianDataset(Dataset):
             'labels': torch.tensor(labels, dtype=torch.int64),
             'image_id': torch.tensor([idx])
         }
-
-        # Apply transforms (if any)
-        if self.transform:
-            image, target = self.transform(image, target)
 
         return image, target
