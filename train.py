@@ -8,7 +8,6 @@ from torchvision.models.detection import RetinaNet
 from torchvision.models.detection.backbone_utils import resnet_fpn_backbone
 from torchvision.models.detection.anchor_utils import AnchorGenerator
 from utils.dataset import AerialPedestrianDataset
-from utils.transforms import Compose, ToTensor, Normalize, RandomHorizontalFlip
 from collate_fn import pad_Collate
 from utils.evaluation import calculate_map
 from torchvision.models.detection import RetinaNet
@@ -18,9 +17,6 @@ from torch.optim.lr_scheduler import LinearLR, SequentialLR
 import albumentations as A
 from albumentations.pytorch import ToTensorV2
 
-# --- User-configurable checkpoint path ---
-# Set this to your desired .pth file to resume training,
-# or set to None to start from scratch:
 checkpoint_path = None
 
 # Training parameters
@@ -33,46 +29,47 @@ g = torch.Generator()
 g.manual_seed(42)
 
 # Data transforms
-def get_transforms(is_train=True):
-    if is_train:
-        transform = A.Compose([
-            A.HorizontalFlip(p=0.5),
-            A.VerticalFlip(p=0.5),
-            A.Rotate(limit=90, p=0.5),
-            A.RandomResizedCrop(size=(800, 1333), scale=(0.8, 1.0), p=0.5),
-            A.RandomBrightnessContrast(p=0.2),
-            A.HueSaturationValue(p=0.2),
-            A.GaussNoise(p=0.2),
-            A.OneOf([
-                A.MotionBlur(p=0.2),
-                A.MedianBlur(blur_limit=3, p=0.1),
-                A.Blur(blur_limit=3, p=0.1),
-            ], p=0.2),
-            A.LongestMaxSize(max_size=1333, p=1.0),
-            A.PadIfNeeded(min_height=800, min_width=800, p=1.0),
-            A.Normalize(mean=(0.485, 0.456, 0.406), std=(0.229, 0.224, 0.225)),
-            ToTensorV2()
-        ], bbox_params=A.BboxParams(
-            format='pascal_voc', 
-            label_fields=['labels'],
-            min_area=4,           # Filter very small boxes (2x2 pixels minimum)
-            min_visibility=0.1,   # Keep boxes with at least 10% visibility
-            clip=True            # Clip boxes to image boundaries
-        ))
-    else:
-        transform = A.Compose([
-            A.LongestMaxSize(max_size=1333, p=1.0),
-            A.PadIfNeeded(min_height=800, min_width=800, p=1.0),
-            A.Normalize(mean=(0.485, 0.456, 0.406), std=(0.229, 0.224, 0.225)),
-            ToTensorV2()
-        ], bbox_params=A.BboxParams(
-            format='pascal_voc', 
-            label_fields=['labels'],
-            min_area=4,
-            min_visibility=0.1,
-            clip=True
-        ))
-    return transform
+def get_val_transform():
+    return A.Compose([
+        A.Normalize(
+            mean=(0.485, 0.456, 0.406),
+            std=(0.229, 0.224, 0.225)
+        ),
+        ToTensorV2()
+    ], bbox_params=A.BboxParams(
+        format='pascal_voc',
+        label_fields=['labels'],
+        min_area=4,
+        min_visibility=0.1,
+        clip=True
+    ))
+
+def get_train_transform():
+    return A.Compose([
+        A.HorizontalFlip(p=0.5),
+        A.RandomBrightnessContrast(p=0.2),
+        A.ShiftScaleRotate(
+            shift_limit=0.05,
+            scale_limit=0.1,
+            rotate_limit=10,
+            border_mode=0,
+            p=0.5
+        ),
+        A.Blur(blur_limit=3, p=0.1),
+        A.CLAHE(p=0.1),
+        A.HueSaturationValue(p=0.2),
+        A.Normalize(
+            mean=(0.485, 0.456, 0.406),
+            std=(0.229, 0.224, 0.225)
+        ),
+        ToTensorV2()
+    ], bbox_params=A.BboxParams(
+        format='pascal_voc',
+        label_fields=['labels'],
+        min_area=4,
+        min_visibility=0.1,
+        clip=True
+    ))
 
 
 # Model creation
@@ -105,7 +102,7 @@ def train():
         'data/train_annotations.csv',
         'data/labels.csv',
         'data',
-        transform=get_transforms(is_train=True)
+        transform=get_train_transform()
     )
     train_loader = DataLoader(train_ds, batch_size=batch_size, shuffle=True, collate_fn=pad_Collate, generator=g)
 
@@ -114,7 +111,7 @@ def train():
                        'data/val_annotations.csv',
                        'data/labels.csv',
                        'data',
-                       transform=get_transforms(is_train=False)
+                       transform=get_val_transform()
                    )  # load train set[1]
     val_loader = DataLoader(
                        val_ds,
@@ -180,7 +177,7 @@ def train():
             if i % 10 == 0:
                 print(f"Epoch [{epoch}/{num_epochs}] Step [{i}/{len(train_loader)}] Loss: {loss.item():.4f}")
 
-        scheduler.step()
+            scheduler.step()
         avg_loss = running_loss / len(train_loader)
         print(f"Epoch {epoch} completed. Avg Loss: {avg_loss:.4f}")
 
