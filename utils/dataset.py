@@ -46,6 +46,17 @@ class AerialPedestrianDataset(Dataset):
         boxes = records[['x1', 'y1', 'x2', 'y2']].values.astype(float).tolist()
         labels = records['class_name'].map(self.class_to_id).values.astype(int).tolist()
 
+        # Convert to tensors
+        if self.transform:
+            transformed = self.transform(
+                image=image,
+                bboxes=boxes,
+                labels=labels
+            )
+            image = transformed['image']
+            boxes = transformed['bboxes']
+            labels = transformed['labels']
+
         if len(boxes) > 0:
             valid_boxes = []
             valid_labels = []
@@ -65,17 +76,6 @@ class AerialPedestrianDataset(Dataset):
         
             boxes = valid_boxes
             labels = valid_labels
-
-        # Convert to tensors
-        if self.transform:
-            transformed = self.transform(
-                image=image,
-                bboxes=boxes,
-                labels=labels
-            )
-            image = transformed['image']
-            boxes = transformed['bboxes']
-            labels = transformed['labels']
 
         if len(boxes) == 0:
             boxes_tensor = torch.zeros((0, 4), dtype=torch.float32)
